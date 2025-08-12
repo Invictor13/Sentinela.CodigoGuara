@@ -50,12 +50,12 @@ def main():
     # Vinculando a tecla Escape a esta função
     root.bind('<Escape>', exit_fullscreen)
 
-    root.title("Sentinela Unimed")
+    root.title("Sentinela Guará")
     root.protocol("WM_DELETE_WINDOW", root.withdraw)
     root.geometry("1280x720")
 
     try:
-        icon_path_ico = resource_path('logo.ico')
+        icon_path_ico = resource_path('logo_guara.ico')
         root.iconbitmap(icon_path_ico)
     except (tk.TclError, FileNotFoundError):
         icon_path_ico = None
