@@ -11,8 +11,6 @@ class PreparationIndicator(Toplevel):
         self.withdraw()
         self.container = tk.Frame(self)
         self.container.pack(fill="both", expand=True)
-        # To be populated by the calling module if needed
-        self.module_instance = None
         self.active_monitor_for_recording = None # Legacy for `show` method
 
     def _clear_container(self):
@@ -89,17 +87,13 @@ class PreparationIndicator(Toplevel):
         self.info_label = tk.Label(self.container, text="F10 para parar", font=("Segoe UI", 10), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         self.info_label.pack(side="left", padx=(0, 15))
 
-        stop_button = tk.Button(self.container, text="PARAR", font=("Segoe UI", 9, "bold"), fg="white", bg=theme["error"], relief="flat",
-                                command=self.module_instance.stop_recording, bd=0, padx=10, pady=2)
-        stop_button.pack(side="left", padx=(0, 5))
-
         self.update_time(0)
         self._display_window(monitor_geom)
         if self.animation_id is None:
-            self._animate_rec()
+            self._animate_rec_async()
 
-    def _animate_rec(self):
-        if not self.winfo_exists() or not (self.module_instance and self.module_instance.is_recording):
+    def _animate_rec_async(self):
+        if not self.winfo_exists() or not self.stop_event.is_set():
             if self.animation_id:
                 self.after_cancel(self.animation_id)
                 self.animation_id = None
@@ -108,7 +102,7 @@ class PreparationIndicator(Toplevel):
         current_color = self.rec_label.cget("fg")
         new_color = self.cget('bg') if current_color == theme["recording_dot"] else theme["recording_dot"]
         self.rec_label.config(fg=new_color)
-        self.animation_id = self.after(700, self._animate_rec)
+        self.animation_id = self.after(700, self._animate_rec_async)
 
     def update_time(self, elapsed_seconds):
         if hasattr(self, 'time_label') and self.time_label.winfo_exists():
@@ -116,3 +110,15 @@ class PreparationIndicator(Toplevel):
             mins, secs = divmod(secs, 60)
             hrs, mins = divmod(mins, 60)
             self.time_label.config(text=f"{hrs:02d}:{mins:02d}:{secs:02d}")
+
+    def update_time_async(self, stop_event):
+        self.stop_event = stop_event
+        self.start_time = time.time()
+
+        def update():
+            if not self.stop_event.is_set():
+                elapsed = time.time() - self.start_time
+                self.update_time(elapsed)
+                self.after(1000, update)
+
+        update()

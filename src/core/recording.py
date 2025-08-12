@@ -1,6 +1,7 @@
 import os
 import time
 import threading
+import queue
 from datetime import datetime
 import cv2
 import mss
@@ -9,28 +10,36 @@ from PIL import Image
 from pynput.mouse import Controller as MouseController
 import tkinter as tk
 from tkinter import messagebox
-import configparser
-from src.config.settings import CONFIG_FILE
-from src.utils import resource_path
+import soundcard as sc
+import ffmpeg
 
+from src.core.presets import get_resolved_preset, RecordingPreset
+from src.utils import resource_path
 from src.ui.preparation_indicator import PreparationIndicator
 from src.ui.dialogs import show_success_dialog
 from src.ui.preparation_mode import PreparationOverlayManager
 
-
 class ScreenRecordingModule:
-    def __init__(self, root, save_path):
+    def __init__(self, root, app_config):
         self.root = root
-        self.save_path = save_path
-        self.state = "idle"  # Can be "idle", "preparing", "recording"
-        self.out = None
-        self.start_time = None
-        self.indicator = PreparationIndicator(self.root)
-        self.indicator.module_instance = self # For legacy `show` method
+        self.app_config = app_config
+        self.state = "idle"
         self.sct = mss.mss()
-        self.thread_gravacao = None
+        self.indicator = PreparationIndicator(self.root)
         self.overlay_manager = None
-        self.should_record_all_screens = False
+
+        # Threading and synchronization
+        self.recording_thread_obj = None
+        self.audio_threads = []
+        self.audio_queues = []
+        self.stop_event = threading.Event()
+
+        # Placeholders for recording parameters
+        self.preset: RecordingPreset = None
+        self.record_mic = False
+        self.record_system_audio = False
+        self.target_monitor = None
+        self.output_filename = ""
 
     @property
     def is_recording(self):
@@ -40,30 +49,10 @@ class ScreenRecordingModule:
     def is_preparing(self):
         return self.state == "preparing"
 
-    def exit_preparation_mode(self):
-        if self.state != "preparing":
+    def enter_preparation_mode(self):
+        if self.is_recording or self.is_preparing:
             return
-
-        if self.overlay_manager:
-            self.overlay_manager.destroy()
-            self.overlay_manager = None
-
-        self.state = "idle"
-        # Ensure the main window is visible again
-        self.root.deiconify()
-
-    def enter_preparation_mode(self, record_all_screens=False):
-        print(f"[RUNA DE DEPURAÇÃO] Modo de Preparação iniciado com record_all_screens = {record_all_screens}")
-        self.should_record_all_screens = record_all_screens
-        if self.state != "idle":
-            return
-
-        if record_all_screens:
-            self.start_recording_mode()
-            return
-
         self.state = "preparing"
-        # The overlay manager will hide the root window
         self.overlay_manager = PreparationOverlayManager(
             self.root,
             self.indicator,
@@ -72,180 +61,212 @@ class ScreenRecordingModule:
         )
         self.overlay_manager.start()
 
-    def start_recording_mode(self, quality_profile="high"):
-        active_monitor = None
-        if self.state == "preparing":
-            if not self.overlay_manager:
-                print("Error: In preparing state but no overlay manager found.")
-                self.state = "idle"
-                return
-            active_monitor = self.overlay_manager.get_active_monitor()
-            self.overlay_manager.destroy()
-            self.overlay_manager = None
-        elif self.state != "idle":
+    def start_recording_mode(self):
+        if self.is_recording:
             return
 
+        if self.is_preparing:
+            if not self.overlay_manager:
+                self.state = "idle"
+                return
+            self.target_monitor = self.overlay_manager.get_active_monitor()
+            self.overlay_manager.destroy()
+            self.overlay_manager = None
+        else: # Direct start (e.g., record all screens in future)
+            self.target_monitor = self.sct.monitors[1]
+
+        # Load settings from app_config
+        preset_key = self.app_config.get("RecordingQuality", "balanced")
+        self.preset = get_resolved_preset(preset_key)
+        self.record_mic = self.app_config.get("RecordMicrophone", False)
+        self.record_system_audio = self.app_config.get("RecordSystemAudio", False)
+
         self.state = "recording"
+        self.stop_event.clear()
         self.root.withdraw()
         time.sleep(0.2)
 
-        target_monitor = active_monitor if not self.should_record_all_screens else None
-        self.thread_gravacao = threading.Thread(target=self.recording_thread, args=(target_monitor, quality_profile), daemon=True)
-        self.thread_gravacao.start()
+        self.recording_thread_obj = threading.Thread(target=self._recording_thread, daemon=True)
+        self.recording_thread_obj.start()
 
-        # The indicator needs to know which monitor to appear on.
-        indicator_monitor = active_monitor if active_monitor else self.sct.monitors[1]
+        indicator_monitor = self.target_monitor or self.sct.monitors[1]
         self.indicator.show(indicator_monitor)
-        self.start_time = time.time()
-        self.update_chronometer_loop()
+        self.indicator.update_time_async(self.stop_event)
 
     def stop_recording(self):
-        if self.state == "recording":
-            self.state = "idle"
-            self.indicator.hide()
-            self.root.deiconify()
-        elif self.state == "preparing":
-            self.state = "idle"
-            if self.overlay_manager:
-                self.overlay_manager.destroy()
-                self.overlay_manager = None
-            self.root.deiconify()
-
-    def recording_thread(self, target_to_record, quality_profile):
-        config = configparser.ConfigParser()
-        config.read(CONFIG_FILE)
-        quality_profile = config.get('Recording', 'quality', fallback='high')
-
-        filename = os.path.join(self.save_path, f"Evidencia_Gravacao_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.mp4")
-
-        try:
-            cursor_img = Image.open(resource_path("cursor.png")).convert("RGBA").resize((32, 32), Image.Resampling.LANCZOS)
-        except FileNotFoundError:
-            cursor_img = None
-
-        mouse_controller = MouseController()
-
-        if self.should_record_all_screens:
-            print("[RUNA DE DEPURAÇÃO] Forja ativada em modo Onipresente (todas as telas).")
-            monitors = self.sct.monitors[1:]
-            total_width = sum(m['width'] for m in monitors)
-            max_height = max(m['height'] for m in monitors)
-
-            if total_width % 2 != 0: total_width += 1
-            if max_height % 2 != 0: max_height += 1
-
-            width, height = total_width, max_height
-            recording_fps = 15.0
-        else:
-            if not target_to_record:
-                print("Error: Target monitor for recording is not set.")
-                self.root.after(0, self.stop_recording)
-                return
-
-            original_width, original_height = target_to_record['width'], target_to_record['height']
-            if quality_profile == "compact":
-                MAX_WIDTH, MAX_HEIGHT = 1280, 720
-                recording_fps = 10.0
-            else:
-                MAX_WIDTH, MAX_HEIGHT = 1920, 1080
-                recording_fps = 15.0
-
-            output_width, output_height = original_width, original_height
-            if original_width > MAX_WIDTH or original_height > MAX_HEIGHT:
-                aspect_ratio = original_width / original_height
-                if aspect_ratio > (MAX_WIDTH / MAX_HEIGHT):
-                    output_width = MAX_WIDTH
-                    output_height = int(output_width / aspect_ratio)
-                else:
-                    output_height = MAX_HEIGHT
-                    output_width = int(output_height * aspect_ratio)
-
-            if output_width % 2 != 0: output_width -= 1
-            if output_height % 2 != 0: output_height -= 1
-            width, height = output_width, output_height
-
-        codecs_to_try = ['X264', 'avc1', 'mp4v']
-        self.out = None
-        for codec in codecs_to_try:
-            fourcc = cv2.VideoWriter_fourcc(*codec)
-            try:
-                self.out = cv2.VideoWriter(filename, fourcc, recording_fps, (width, height))
-                if self.out.isOpened(): break
-            except Exception: self.out = None
-
-        if not self.out or not self.out.isOpened():
-            messagebox.showerror("Erro Crítico", "Nenhum codec de vídeo funcional foi encontrado.")
-            self.root.after(0, self.stop_recording)
+        if not self.is_recording:
+            if self.is_preparing:
+                self.state = "idle"
+                if self.overlay_manager:
+                    self.overlay_manager.destroy()
+                    self.overlay_manager = None
+                self.root.deiconify()
             return
 
-        # ANTES do loop, garanta que o indicador esteja visível.
-        self.indicator.deiconify()
+        self.stop_event.set()
 
-        with mss.mss() as sct:
-            while self.is_recording:
-                loop_start_time = time.time()
-                try:
-                    if self.should_record_all_screens:
-                        monitors_to_capture = sct.monitors[1:]
-                        combined_frame = np.zeros((height, width, 3), dtype=np.uint8)
-                        current_x_offset = 0
-                        virtual_screen_left = sct.monitors[0]['left']
-                        virtual_screen_top = sct.monitors[0]['top']
+        # Wait for threads to finish
+        if self.recording_thread_obj:
+            self.recording_thread_obj.join(timeout=5)
+        for t in self.audio_threads:
+            t.join(timeout=3)
 
-                        for monitor in monitors_to_capture:
-                            sct_img = sct.grab(monitor)
-                            frame_np = np.array(sct_img)
-                            h_m, w_m, _ = frame_np.shape
-                            frame_bgr = cv2.cvtColor(frame_np, cv2.COLOR_BGRA2BGR)
-                            combined_frame[0:h_m, current_x_offset:current_x_offset + w_m] = frame_bgr
-                            current_x_offset += w_m
-
-                        final_frame_pil = Image.fromarray(cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB))
-                        if cursor_img:
-                            mouse_pos = mouse_controller.position
-                            cursor_x = mouse_pos[0] - virtual_screen_left
-                            cursor_y = mouse_pos[1] - virtual_screen_top
-                            final_frame_pil.paste(cursor_img, (cursor_x, cursor_y), cursor_img)
-                        self.out.write(cv2.cvtColor(np.array(final_frame_pil), cv2.COLOR_RGB2BGR))
-                    else:
-                        capture_area = target_to_record
-
-                        sct_img = sct.grab(capture_area)
-
-                        frame_np = np.array(sct_img)
-                        original_width, original_height = target_to_record['width'], target_to_record['height']
-                        if (original_width, original_height) != (width, height):
-                            frame_np_resized = cv2.resize(frame_np, (width, height), interpolation=cv2.INTER_AREA)
-                        else:
-                            frame_np_resized = frame_np
-                        frame_pil = Image.fromarray(cv2.cvtColor(frame_np_resized, cv2.COLOR_BGRA2RGB))
-                        if cursor_img:
-                            mouse_pos = mouse_controller.position
-                            cursor_x_in_capture = mouse_pos[0] - capture_area['left']
-                            cursor_y_in_capture = mouse_pos[1] - capture_area['top']
-                            scaled_cursor_x = int(cursor_x_in_capture * (width / original_width))
-                            scaled_cursor_y = int(cursor_y_in_capture * (height / original_height))
-                            frame_pil.paste(cursor_img, (scaled_cursor_x, scaled_cursor_y), cursor_img)
-                        self.out.write(cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR))
-                except Exception as e:
-                    print(f"Erro durante o loop de gravação: {e}")
-                    if self.indicator:
-                        self.indicator.deiconify()
-                    self.state = "idle"
-                sleep_time = (1/recording_fps) - (time.time() - loop_start_time)
-                if sleep_time > 0: time.sleep(sleep_time)
-
-        # DEPOIS do loop, esconda o indicador
+        self.state = "idle"
         self.indicator.hide()
-        if self.out: self.out.release()
-        def finalize_on_main_thread():
-            if os.path.exists(filename) and os.path.getsize(filename) > 0:
-                show_success_dialog(self.root, "Gravação salva.", os.path.dirname(filename), filename)
-            elif os.path.exists(filename):
-                os.remove(filename)
-        self.root.after(0, finalize_on_main_thread)
+        self.root.deiconify()
 
-    def update_chronometer_loop(self):
-        if self.is_recording and self.start_time is not None:
-            self.indicator.update_time(time.time() - self.start_time)
-            self.root.after(1000, self.update_chronometer_loop)
+        # Finalize on main thread to avoid Tkinter issues
+        def finalize():
+            if os.path.exists(self.output_filename) and os.path.getsize(self.output_filename) > 0:
+                show_success_dialog(self.root, "Gravação salva.", os.path.dirname(self.output_filename), self.output_filename)
+            elif os.path.exists(self.output_filename):
+                os.remove(self.output_filename) # Remove empty file on error
+        self.root.after(100, finalize)
+
+    def _audio_capture_thread(self, audio_queue: queue.Queue, is_mic: bool):
+        try:
+            if is_mic:
+                # Get default microphone
+                device = sc.default_microphone()
+            else:
+                # Get default speaker (loopback)
+                device = sc.default_speaker()
+
+            with device.recorder(samplerate=self.preset.audio.samplerate, channels=self.preset.audio.channels) as recorder:
+                while not self.stop_event.is_set():
+                    data = recorder.record(numframes=1024)
+                    if data is not None:
+                        audio_queue.put(data.tobytes())
+        except Exception as e:
+            print(f"Erro na captura de áudio ({'mic' if is_mic else 'loopback'}): {e}")
+            # Signal that this audio stream is dead
+            audio_queue.put(None)
+
+    def _recording_thread(self):
+        save_path = self.app_config["DefaultSaveLocation"]
+        self.output_filename = os.path.join(save_path, f"Evidencia_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}{self.preset.container}")
+
+        # --- Setup Video Stream ---
+        video_settings = self.preset.video
+        width, height = video_settings.resolution
+
+        video_input = ffmpeg.input(
+            'pipe:',
+            format='rawvideo',
+            pix_fmt='bgr24', # OpenCV uses BGR
+            s=f'{width}x{height}',
+            r=video_settings.fps
+        )
+
+        # --- Setup Audio Streams ---
+        self.audio_queues = []
+        self.audio_threads = []
+        audio_inputs = []
+
+        if self.record_mic:
+            mic_q = queue.Queue()
+            self.audio_queues.append(mic_q)
+            mic_thread = threading.Thread(target=self._audio_capture_thread, args=(mic_q, True), daemon=True)
+            self.audio_threads.append(mic_thread)
+            audio_inputs.append(ffmpeg.input('pipe:', format='f32le', ar=str(self.preset.audio.samplerate), ac=self.preset.audio.channels))
+
+        if self.record_system_audio:
+            sys_q = queue.Queue()
+            self.audio_queues.append(sys_q)
+            sys_thread = threading.Thread(target=self._audio_capture_thread, args=(sys_q, False), daemon=True)
+            self.audio_threads.append(sys_thread)
+            audio_inputs.append(ffmpeg.input('pipe:', format='f32le', ar=str(self.preset.audio.samplerate), ac=self.preset.audio.channels))
+
+        # Start audio capture
+        for t in self.audio_threads:
+            t.start()
+
+        # --- Configure FFmpeg Process ---
+        streams = [video_input]
+        if audio_inputs:
+            # If there's audio, mix it
+            if len(audio_inputs) > 1:
+                mixed_audio = ffmpeg.filter(audio_inputs, 'amix', inputs=len(audio_inputs))
+                streams.append(mixed_audio)
+            else:
+                streams.extend(audio_inputs)
+
+        process = (
+            ffmpeg.output(
+                *streams,
+                self.output_filename,
+                vcodec=video_settings.codec,
+                pix_fmt='yuv420p', # Common pixel format for compatibility
+                preset=video_settings.preset,
+                crf=video_settings.crf,
+                acodec=self.preset.audio.codec,
+                audio_bitrate=self.preset.audio.bitrate,
+                r=video_settings.fps,
+                **{'g': video_settings.fps * 2} # GOP size
+            )
+            .overwrite_output()
+            .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
+        )
+
+        # --- Main Recording Loop ---
+        try:
+            with mss.mss() as sct:
+                # Load cursor image once
+                try:
+                    cursor_img = Image.open(resource_path("cursor.png")).convert("RGBA").resize((32, 32), Image.Resampling.LANCZOS)
+                except FileNotFoundError:
+                    cursor_img = None
+                mouse_controller = MouseController()
+
+                while not self.stop_event.is_set():
+                    loop_start_time = time.time()
+
+                    # Capture video frame
+                    sct_img = sct.grab(self.target_monitor)
+                    frame_np = np.array(sct_img)
+
+                    # Resize if necessary
+                    if (frame_np.shape[1], frame_np.shape[0]) != (width, height):
+                        frame_np = cv2.resize(frame_np, (width, height), interpolation=cv2.INTER_AREA)
+
+                    # Add cursor
+                    if cursor_img:
+                        frame_pil = Image.fromarray(cv2.cvtColor(frame_np, cv2.COLOR_BGRA2RGB))
+                        mouse_pos = mouse_controller.position
+                        cursor_x = mouse_pos[0] - self.target_monitor['left']
+                        cursor_y = mouse_pos[1] - self.target_monitor['top']
+                        scaled_cursor_x = int(cursor_x * (width / self.target_monitor['width']))
+                        scaled_cursor_y = int(cursor_y * (height / self.target_monitor['height']))
+                        frame_pil.paste(cursor_img, (scaled_cursor_x, scaled_cursor_y), cursor_img)
+                        final_frame = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
+                    else:
+                        final_frame = cv2.cvtColor(frame_np, cv2.COLOR_BGRA2BGR)
+
+                    # Write video frame to ffmpeg stdin
+                    process.stdin.write(final_frame.tobytes())
+
+                    # Write audio frames
+                    for i, q in enumerate(self.audio_queues):
+                        try:
+                            while not q.empty():
+                                audio_data = q.get_nowait()
+                                if audio_data:
+                                    process.stdin.write(audio_data)
+                        except queue.Empty:
+                            continue
+
+                    # Frame rate control
+                    sleep_time = (1 / video_settings.fps) - (time.time() - loop_start_time)
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+
+        except Exception as e:
+            print(f"Erro fatal no loop de gravação: {e}")
+        finally:
+            # --- Cleanup ---
+            process.stdin.close()
+            process.wait()
+            # Drain audio queues
+            for q in self.audio_queues:
+                while not q.empty():
+                    q.get_nowait()
