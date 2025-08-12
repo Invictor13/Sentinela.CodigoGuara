@@ -92,6 +92,7 @@ class ScreenRecordingModule:
         indicator_monitor = self.target_monitor or self.sct.monitors[1]
         self.indicator.show(indicator_monitor, self.stop_event)
 
+
     def stop_recording(self):
         if not self.is_recording:
             if self.is_preparing:

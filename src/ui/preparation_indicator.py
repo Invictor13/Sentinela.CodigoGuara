@@ -88,6 +88,7 @@ class PreparationIndicator(Toplevel):
         self.info_label = tk.Label(self.container, text="F10 para parar", font=("Segoe UI", 10), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         self.info_label.pack(side="left", padx=(0, 15))
 
+
         self._display_window(monitor_geom)
         self.update_time_async() # Inicia o cronômetro
         self._animate_rec_async() # Inicia a animação
@@ -112,6 +113,7 @@ class PreparationIndicator(Toplevel):
             hrs, mins = divmod(mins, 60)
             self.time_label.config(text=f"{hrs:02d}:{mins:02d}:{secs:02d}")
 
+
     def update_time_async(self):
         self.start_time = time.time()
 
@@ -121,5 +123,4 @@ class PreparationIndicator(Toplevel):
                 self.update_time(elapsed)
                 self.after(1000, update)
 
-        self.update_time(0)
-        update()
+
