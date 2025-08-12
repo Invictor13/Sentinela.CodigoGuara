@@ -16,7 +16,12 @@ def load_app_config():
 
     if not config.has_section('Recording'):
         config.add_section('Recording')
-        config.set('Recording', 'Quality', 'high')
+        config.set('Recording', 'Quality', 'balanced') # Default to balanced
+
+    if not config.has_section('Audio'):
+        config.add_section('Audio')
+        config.set('Audio', 'RecordMicrophone', 'false')
+        config.set('Audio', 'RecordSystemAudio', 'false')
 
     if not config.has_section('Hotkeys'):
         config.add_section('Hotkeys')
@@ -29,7 +34,9 @@ def load_app_config():
 
     # --- Read values ---
     current_save_location = config.get('Paths', 'DefaultSaveLocation', fallback=DEFAULT_SAVE_LOCATION_FALLBACK)
-    recording_quality = config.get('Recording', 'Quality', fallback='high')
+    recording_quality = config.get('Recording', 'Quality', fallback='balanced')
+    record_mic = config.getboolean('Audio', 'RecordMicrophone', fallback=False)
+    record_system_audio = config.getboolean('Audio', 'RecordSystemAudio', fallback=False)
     capture_hotkey = config.get('Hotkeys', 'capture', fallback='F9')
     record_hotkey = config.get('Hotkeys', 'record', fallback='F10')
     has_run_before = config.getboolean('User', 'has_run_before', fallback=False)
@@ -43,21 +50,26 @@ def load_app_config():
     return {
         "DefaultSaveLocation": current_save_location,
         "RecordingQuality": recording_quality,
+        "RecordMicrophone": record_mic,
+        "RecordSystemAudio": record_system_audio,
         "CaptureHotkey": capture_hotkey,
         "RecordHotkey": record_hotkey,
         "HasRunBefore": has_run_before,
         "config_parser_obj": config
     }
 
-def save_app_config(config_parser_obj, save_path, quality, capture_hotkey, record_hotkey):
+def save_app_config(config_parser_obj, save_path, quality, capture_hotkey, record_hotkey, record_mic, record_system_audio):
     # Ensure sections exist
     if not config_parser_obj.has_section('Paths'): config_parser_obj.add_section('Paths')
     if not config_parser_obj.has_section('Recording'): config_parser_obj.add_section('Recording')
+    if not config_parser_obj.has_section('Audio'): config_parser_obj.add_section('Audio')
     if not config_parser_obj.has_section('Hotkeys'): config_parser_obj.add_section('Hotkeys')
 
     # Set values
     config_parser_obj.set('Paths', 'DefaultSaveLocation', save_path)
     config_parser_obj.set('Recording', 'Quality', quality)
+    config_parser_obj.set('Audio', 'RecordMicrophone', str(record_mic).lower())
+    config_parser_obj.set('Audio', 'RecordSystemAudio', str(record_system_audio).lower())
     config_parser_obj.set('Hotkeys', 'capture', capture_hotkey)
     config_parser_obj.set('Hotkeys', 'record', record_hotkey)
 

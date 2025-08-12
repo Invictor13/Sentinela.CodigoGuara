@@ -5,3 +5,6 @@ pynput
 pygetwindow
 mss
 pystray
+soundcard
+screeninfo
+ffmpeg-python
