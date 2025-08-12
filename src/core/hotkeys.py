@@ -64,8 +64,7 @@ def key_listener_thread_proc(capture_module, recording_module, root_window, main
         # This check is illustrative. Assuming is_recording is a boolean property.
         # The actual state transition logic for recording remains unchanged.
         if recording_module.state == "idle":
-            record_all = main_app_instance.record_all_screens_var.get()
-            root_window.after(0, recording_module.enter_preparation_mode, record_all)
+            root_window.after(0, recording_module.enter_preparation_mode)
         elif recording_module.state == "preparing":
             root_window.after(0, recording_module.start_recording_mode)
         elif recording_module.state == "recording":
