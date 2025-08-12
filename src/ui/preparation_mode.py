@@ -18,7 +18,7 @@ class PreparationOverlayManager:
         self.indicator = indicator
         self.indicator_text = indicator_text
         self.inactive_text = inactive_text
-        self.logo_path = logo_path if logo_path is not None else resource_path("logo.png")
+        self.logo_path = logo_path if logo_path is not None else resource_path("logo_guara.png")
 
         self.sct = mss.mss()
         self.overlays = {}

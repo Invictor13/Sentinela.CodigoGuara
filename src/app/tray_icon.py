@@ -4,6 +4,7 @@ from PIL import Image
 import os
 
 from src.utils import resource_path
+from src.ui.theme import theme
 
 def setup_tray_icon(root, capture_module, recording_module, app_config):
 
@@ -25,9 +26,10 @@ def setup_tray_icon(root, capture_module, recording_module, app_config):
             print(f"Não foi possível abrir a pasta de evidências: {e}")
 
     try:
-        image = Image.open(resource_path("logo.ico"))
+        image = Image.open(resource_path("logo_guara.ico"))
     except FileNotFoundError:
-        image = Image.new('RGB', (64, 64), color = '#00995D')
+        # Create a placeholder image with the primary theme color
+        image = Image.new('RGB', (64, 64), color = theme["primary"])
 
     menu = (
         item('Exibir Sentinela', show_main_window, default=True),
@@ -39,5 +41,5 @@ def setup_tray_icon(root, capture_module, recording_module, app_config):
         item('Sair', quit_application)
     )
 
-    icon_instance = icon("Sentinela", image, "Sentinela Unimed", menu)
+    icon_instance = icon("Sentinela Guará", image, "Sentinela Guará", menu)
     icon_instance.run()

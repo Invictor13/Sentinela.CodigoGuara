@@ -1,4 +1,4 @@
-#  Sentinela Unimed 🛡️
+#  Sentinela Guará 🐺
 
 O Sentinela é uma ferramenta de captura de evidências simples e segura, projetada para gravar a tela ou tirar screenshots de forma rápida e eficiente. Ideal para documentar processos, registrar bugs ou criar guias visuais.
 

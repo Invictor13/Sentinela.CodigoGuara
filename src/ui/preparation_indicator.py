@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import Toplevel
+from .theme import theme
 
 class PreparationIndicator(Toplevel):
     def __init__(self, parent):
@@ -20,12 +21,12 @@ class PreparationIndicator(Toplevel):
 
     def show_preparation_mode(self, monitor_geom, text=""):
         self._clear_container()
-        self.container.configure(bg='#2b2b2b', padx=10, pady=5)
+        self.container.configure(bg=theme["indicator_bg"], padx=10, pady=5)
 
-        prep_label = tk.Label(self.container, text="● Preparando", font=("Segoe UI", 12, "bold"), fg="#ffcc00", bg=self.container.cget('bg'))
+        prep_label = tk.Label(self.container, text="● Preparando", font=("Segoe UI", 12, "bold"), fg=theme["preparation_text"], bg=self.container.cget('bg'))
         prep_label.pack(side="left", padx=(0, 10))
 
-        info_label = tk.Label(self.container, text=text, font=("Segoe UI", 10), fg="white", bg=self.container.cget('bg'))
+        info_label = tk.Label(self.container, text=text, font=("Segoe UI", 10), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         info_label.pack(side="left", padx=(0, 15))
 
         self._display_window(monitor_geom)
@@ -41,9 +42,10 @@ class PreparationIndicator(Toplevel):
         original_bg = self.container.cget('bg')
         original_prep_fg = self.container.winfo_children()[0].cget('fg') # Assuming first child is the "● Preparando" label
 
-        self.container.configure(bg='green')
+        success_color = theme["success"]
+        self.container.configure(bg=success_color)
         for widget in self.container.winfo_children():
-            widget.configure(bg='green')
+            widget.configure(bg=success_color)
 
         def restore_colors():
             if self.winfo_exists():
@@ -76,18 +78,18 @@ class PreparationIndicator(Toplevel):
     def show(self, monitor_geom):
         """ Mostra o indicador no modo de gravação normal. """
         self._clear_container()
-        self.container.configure(bg='#2b2b2b', padx=10, pady=5)
+        self.container.configure(bg=theme["indicator_bg"], padx=10, pady=5)
 
-        self.rec_label = tk.Label(self.container, text="REC", font=("Segoe UI", 12, "bold"), fg="#ff0000", bg=self.container.cget('bg'))
+        self.rec_label = tk.Label(self.container, text="REC", font=("Segoe UI", 12, "bold"), fg=theme["recording_dot"], bg=self.container.cget('bg'))
         self.rec_label.pack(side="left", padx=(0, 10))
 
-        self.time_label = tk.Label(self.container, text="00:00:00", font=("Segoe UI", 12, "bold"), fg="white", bg=self.container.cget('bg'))
+        self.time_label = tk.Label(self.container, text="00:00:00", font=("Segoe UI", 12, "bold"), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         self.time_label.pack(side="left", padx=(0, 10))
 
-        self.info_label = tk.Label(self.container, text="F10 para parar", font=("Segoe UI", 10), fg="white", bg=self.container.cget('bg'))
+        self.info_label = tk.Label(self.container, text="F10 para parar", font=("Segoe UI", 10), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         self.info_label.pack(side="left", padx=(0, 15))
 
-        stop_button = tk.Button(self.container, text="PARAR", font=("Segoe UI", 9, "bold"), fg="white", bg="#c70000", relief="flat",
+        stop_button = tk.Button(self.container, text="PARAR", font=("Segoe UI", 9, "bold"), fg="white", bg=theme["error"], relief="flat",
                                 command=self.module_instance.stop_recording, bd=0, padx=10, pady=2)
         stop_button.pack(side="left", padx=(0, 5))
 
@@ -104,7 +106,7 @@ class PreparationIndicator(Toplevel):
             return
 
         current_color = self.rec_label.cget("fg")
-        new_color = self.cget('bg') if current_color == '#ff0000' else '#ff0000'
+        new_color = self.cget('bg') if current_color == theme["recording_dot"] else theme["recording_dot"]
         self.rec_label.config(fg=new_color)
         self.animation_id = self.after(700, self._animate_rec)
 
