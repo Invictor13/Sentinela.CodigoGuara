@@ -73,8 +73,9 @@ class PreparationIndicator(Toplevel):
     # This part remains to avoid breaking the recording functionality,
     # but ideally, it would be in its own `RecordingStateIndicator` class.
 
-    def show(self, monitor_geom):
+    def show(self, monitor_geom, stop_event):
         """ Mostra o indicador no modo de gravação normal. """
+        self.stop_event = stop_event
         self._clear_container()
         self.container.configure(bg=theme["indicator_bg"], padx=10, pady=5)
 
@@ -87,6 +88,8 @@ class PreparationIndicator(Toplevel):
         self.info_label = tk.Label(self.container, text="F10 para parar", font=("Segoe UI", 10), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         self.info_label.pack(side="left", padx=(0, 15))
 
+    def _animate_rec_async(self):
+        if not self.winfo_exists() or self.stop_event.is_set():
         self.update_time(0)
         self._display_window(monitor_geom)
         if self.animation_id is None:
@@ -111,14 +114,22 @@ class PreparationIndicator(Toplevel):
             hrs, mins = divmod(mins, 60)
             self.time_label.config(text=f"{hrs:02d}:{mins:02d}:{secs:02d}")
 
+     def update_time_async(self):
+        self.start_time = time.time()
+
+        def update():
+            if self.winfo_exists() and not self.stop_event.is_set():
+
     def update_time_async(self, stop_event):
         self.stop_event = stop_event
         self.start_time = time.time()
 
         def update():
             if not self.stop_event.is_set():
+
                 elapsed = time.time() - self.start_time
                 self.update_time(elapsed)
                 self.after(1000, update)
 
-        update()
+
+
