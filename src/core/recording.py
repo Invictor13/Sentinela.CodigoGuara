@@ -90,8 +90,8 @@ class ScreenRecordingModule:
         self.recording_thread_obj.start()
 
         indicator_monitor = self.target_monitor or self.sct.monitors[1]
-        self.indicator.show(indicator_monitor)
-        self.indicator.update_time_async(self.stop_event)
+        self.indicator.show(indicator_monitor, self.stop_event)
+
 
     def stop_recording(self):
         if not self.is_recording:

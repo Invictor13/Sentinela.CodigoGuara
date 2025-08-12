@@ -88,15 +88,14 @@ class PreparationIndicator(Toplevel):
         self.info_label = tk.Label(self.container, text="F10 para parar", font=("Segoe UI", 10), fg=theme["indicator_text"], bg=self.container.cget('bg'))
         self.info_label.pack(side="left", padx=(0, 15))
 
-    def _animate_rec_async(self):
-        if not self.winfo_exists() or self.stop_event.is_set():
-        self.update_time(0)
+
         self._display_window(monitor_geom)
-        if self.animation_id is None:
-            self._animate_rec_async()
+        self.update_time_async() # Inicia o cronômetro
+        self._animate_rec_async() # Inicia a animação
 
     def _animate_rec_async(self):
-        if not self.winfo_exists() or not self.stop_event.is_set():
+        # Correcting indentation and ensuring the stop event is checked properly.
+        if not self.winfo_exists() or self.stop_event.is_set():
             if self.animation_id:
                 self.after_cancel(self.animation_id)
                 self.animation_id = None
@@ -114,22 +113,14 @@ class PreparationIndicator(Toplevel):
             hrs, mins = divmod(mins, 60)
             self.time_label.config(text=f"{hrs:02d}:{mins:02d}:{secs:02d}")
 
-     def update_time_async(self):
+
+    def update_time_async(self):
         self.start_time = time.time()
 
         def update():
             if self.winfo_exists() and not self.stop_event.is_set():
-
-    def update_time_async(self, stop_event):
-        self.stop_event = stop_event
-        self.start_time = time.time()
-
-        def update():
-            if not self.stop_event.is_set():
-
                 elapsed = time.time() - self.start_time
                 self.update_time(elapsed)
                 self.after(1000, update)
-
 
 
