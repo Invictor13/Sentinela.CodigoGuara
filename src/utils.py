@@ -4,16 +4,16 @@ import os
 import logging
 from screeninfo import get_monitors
 
-def resource_path(relative_path):
-    """ Obtém o caminho absoluto para um recurso, funciona para dev e para o PyInstaller """
+def resource_path(relative_path: str) -> str:
+    """ Obtém o caminho absoluto para um recurso, funcionando para dev e para o PyInstaller. """
     try:
-        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        # O PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
         base_path = sys._MEIPASS
     except Exception:
-        # Se não estiver no modo PyInstaller, use o caminho do arquivo
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        # _MEIPASS não definido, então estamos em modo de desenvolvimento
+        base_path = os.path.abspath(".")
 
-    return os.path.join(base_path, "assets", relative_path)
+    return os.path.join(base_path, relative_path)
 
 def get_primary_monitor_resolution():
     """Retorna a resolução (largura, altura) do monitor primário."""
