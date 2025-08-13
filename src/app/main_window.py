@@ -58,7 +58,7 @@ class MainApplication(tk.Frame):
         header_container = tk.Frame(self.main_card_frame, bg=theme["card_bg"], padx=20, pady=15)
         header_container.pack(fill="x", expand=True, pady=(10,0))
         try:
-            logo_image = Image.open(resource_path("logo_guara.png"))
+            logo_image = Image.open(resource_path("assets/logo_guara.png"))
             logo_image.thumbnail((200, 60))
             self.logo_tk = ImageTk.PhotoImage(logo_image)
             tk.Label(header_container, image=self.logo_tk, bg=theme["card_bg"]).pack(pady=(0,10))

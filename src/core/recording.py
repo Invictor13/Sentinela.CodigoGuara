@@ -175,7 +175,7 @@ class ScreenRecordingModule:
                 # --- Main Recording Loop ---
                 with mss.mss() as sct:
                     try:
-                        cursor_img = Image.open(resource_path("cursor.png")).convert("RGBA").resize((32, 32), Image.Resampling.LANCZOS)
+                        cursor_img = Image.open(resource_path("assets/cursor.png")).convert("RGBA").resize((32, 32), Image.Resampling.LANCZOS)
                     except FileNotFoundError:
                         cursor_img = None
                     mouse_controller = MouseController()

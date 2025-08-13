@@ -26,7 +26,7 @@ def setup_tray_icon(root, capture_module, recording_module, app_config):
             print(f"Não foi possível abrir a pasta de evidências: {e}")
 
     try:
-        image = Image.open(resource_path("logo_guara.ico"))
+        image = Image.open(resource_path("assets/logo_guara.ico"))
     except FileNotFoundError:
         # Create a placeholder image with the primary theme color
         image = Image.new('RGB', (64, 64), color = theme["primary"])
