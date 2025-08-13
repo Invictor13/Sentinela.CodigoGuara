@@ -48,9 +48,10 @@ class ScreenRecordingModule:
     def is_preparing(self):
         return self.state == "preparing"
 
-    def enter_preparation_mode(self):
+    def enter_preparation_mode(self, record_all_screens=False):
         if self.is_recording or self.is_preparing:
             return
+        self.record_all_screens = record_all_screens
         self.state = "preparing"
         self.overlay_manager = PreparationOverlayManager(
             self.root,
