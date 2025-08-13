@@ -6,7 +6,7 @@ import logging
 class AudioSettings:
     """Configurações de áudio para um preset."""
     codec: str
-    bitrate: str
+    bitrate: int
     channels: int = 2
     samplerate: int = 48000
 
@@ -66,7 +66,7 @@ PRESET_HIGH = RecordingPreset(
         crf=18,
         preset='ultrafast'
     ),
-    audio=AudioSettings(codec='aac', bitrate='320k')
+    audio=AudioSettings(codec='aac', bitrate=320000)
 )
 
 PRESET_BALANCED = RecordingPreset(
@@ -79,7 +79,7 @@ PRESET_BALANCED = RecordingPreset(
         crf=23,
         preset='medium'
     ),
-    audio=AudioSettings(codec='aac', bitrate='192k')
+    audio=AudioSettings(codec='aac', bitrate=192000)
 )
 
 PRESET_COMPACT = RecordingPreset(
@@ -92,7 +92,7 @@ PRESET_COMPACT = RecordingPreset(
         crf=32,
         preset='medium'
     ),
-    audio=AudioSettings(codec='libopus', bitrate='96k')
+    audio=AudioSettings(codec='libopus', bitrate=96000)
 )
 
 # --- Dicionário para fácil acesso ---

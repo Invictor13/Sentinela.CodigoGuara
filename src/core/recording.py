@@ -9,9 +9,8 @@ import numpy as np
 from PIL import Image
 from pynput.mouse import Controller as MouseController
 import tkinter as tk
-from tkinter import messagebox
 import soundcard as sc
-import ffmpeg
+import av
 
 from src.core.presets import get_resolved_preset, RecordingPreset
 from src.utils import resource_path
@@ -30,8 +29,8 @@ class ScreenRecordingModule:
 
         # Threading and synchronization
         self.recording_thread_obj = None
-        self.audio_threads = []
-        self.audio_queues = []
+        self.audio_thread = None
+        self.audio_queue = queue.Queue()
         self.stop_event = threading.Event()
 
         # Placeholders for recording parameters
@@ -72,10 +71,9 @@ class ScreenRecordingModule:
             self.target_monitor = self.overlay_manager.get_active_monitor()
             self.overlay_manager.destroy()
             self.overlay_manager = None
-        else: # Direct start (e.g., record all screens in future)
+        else:
             self.target_monitor = self.sct.monitors[1]
 
-        # Load settings from app_config
         preset_key = self.app_config.get("RecordingQuality", "balanced")
         self.preset = get_resolved_preset(preset_key)
         self.record_mic = self.app_config.get("RecordMicrophone", False)
@@ -92,7 +90,6 @@ class ScreenRecordingModule:
         indicator_monitor = self.target_monitor or self.sct.monitors[1]
         self.indicator.show(indicator_monitor, self.stop_event)
 
-
     def stop_recording(self):
         if not self.is_recording:
             if self.is_preparing:
@@ -105,168 +102,160 @@ class ScreenRecordingModule:
 
         self.stop_event.set()
 
-        # Wait for threads to finish
         if self.recording_thread_obj:
-            self.recording_thread_obj.join(timeout=5)
-        for t in self.audio_threads:
-            t.join(timeout=3)
+            self.recording_thread_obj.join(timeout=10)
+        if self.audio_thread:
+            self.audio_thread.join(timeout=5)
 
         self.state = "idle"
         self.indicator.hide()
         self.root.deiconify()
 
-        # Finalize on main thread to avoid Tkinter issues
         def finalize():
             if os.path.exists(self.output_filename) and os.path.getsize(self.output_filename) > 0:
                 show_success_dialog(self.root, "Gravação salva.", os.path.dirname(self.output_filename), self.output_filename)
             elif os.path.exists(self.output_filename):
-                os.remove(self.output_filename) # Remove empty file on error
+                os.remove(self.output_filename)
         self.root.after(100, finalize)
 
-    def _audio_capture_thread(self, audio_queue: queue.Queue, is_mic: bool):
-        try:
-            if is_mic:
-                # Get default microphone
-                device = sc.default_microphone()
-            else:
-                # Get default speaker (loopback)
-                device = sc.default_speaker()
+    def _audio_capture_thread(self):
+        # For simplicity, we'll handle only one audio source for now: the microphone.
+        # A more complex implementation would mix or select between mic and system audio.
+        device = None
+        if self.record_mic:
+            device = sc.default_microphone()
+        elif self.record_system_audio:
+            device = sc.default_speaker(include_loopback=True)
 
+        if not device:
+            return
+
+        try:
             with device.recorder(samplerate=self.preset.audio.samplerate, channels=self.preset.audio.channels) as recorder:
                 while not self.stop_event.is_set():
                     data = recorder.record(numframes=1024)
                     if data is not None:
-                        audio_queue.put(data.tobytes())
+                        self.audio_queue.put(data)
         except Exception as e:
-            print(f"Erro na captura de áudio ({'mic' if is_mic else 'loopback'}): {e}")
-            # Signal that this audio stream is dead
-            audio_queue.put(None)
+            print(f"Erro na captura de áudio: {e}")
+        finally:
+            self.audio_queue.put(None) # Signal completion
 
     def _recording_thread(self):
         save_path = self.app_config["DefaultSaveLocation"]
         self.output_filename = os.path.join(save_path, f"Evidencia_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}{self.preset.container}")
 
-        # --- Setup Video Stream ---
         video_settings = self.preset.video
         width, height = video_settings.resolution
+        fps = video_settings.fps
 
-        video_input = ffmpeg.input(
-            'pipe:',
-            format='rawvideo',
-            pix_fmt='bgr24', # OpenCV uses BGR
-            s=f'{width}x{height}',
-            r=video_settings.fps
-        )
+        has_audio = self.record_mic or self.record_system_audio
 
-        # --- Setup Audio Streams ---
-        self.audio_queues = []
-        self.audio_threads = []
-        audio_inputs = []
-
-        if self.record_mic:
-            mic_q = queue.Queue()
-            self.audio_queues.append(mic_q)
-            mic_thread = threading.Thread(target=self._audio_capture_thread, args=(mic_q, True), daemon=True)
-            self.audio_threads.append(mic_thread)
-            audio_inputs.append(ffmpeg.input('pipe:', format='f32le', ar=str(self.preset.audio.samplerate), ac=self.preset.audio.channels))
-
-        if self.record_system_audio:
-            sys_q = queue.Queue()
-            self.audio_queues.append(sys_q)
-            sys_thread = threading.Thread(target=self._audio_capture_thread, args=(sys_q, False), daemon=True)
-            self.audio_threads.append(sys_thread)
-            audio_inputs.append(ffmpeg.input('pipe:', format='f32le', ar=str(self.preset.audio.samplerate), ac=self.preset.audio.channels))
-
-        # Start audio capture
-        for t in self.audio_threads:
-            t.start()
-
-        # --- Configure FFmpeg Process ---
-        streams = [video_input]
-        if audio_inputs:
-            # If there's audio, mix it
-            if len(audio_inputs) > 1:
-                mixed_audio = ffmpeg.filter(audio_inputs, 'amix', inputs=len(audio_inputs))
-                streams.append(mixed_audio)
-            else:
-                streams.extend(audio_inputs)
-
-        process = (
-            ffmpeg.output(
-                *streams,
-                self.output_filename,
-                vcodec=video_settings.codec,
-                pix_fmt='yuv420p', # Common pixel format for compatibility
-                preset=video_settings.preset,
-                crf=video_settings.crf,
-                acodec=self.preset.audio.codec,
-                audio_bitrate=self.preset.audio.bitrate,
-                r=video_settings.fps,
-                **{'g': video_settings.fps * 2} # GOP size
-            )
-            .overwrite_output()
-            .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
-        )
-
-        # --- Main Recording Loop ---
         try:
-            with mss.mss() as sct:
-                # Load cursor image once
-                try:
-                    cursor_img = Image.open(resource_path("cursor.png")).convert("RGBA").resize((32, 32), Image.Resampling.LANCZOS)
-                except FileNotFoundError:
-                    cursor_img = None
-                mouse_controller = MouseController()
+            with av.open(self.output_filename, mode='w') as container:
+                # --- Stream Setup ---
+                video_stream = container.add_stream(video_settings.codec, rate=fps)
+                video_stream.width = width
+                video_stream.height = height
+                video_stream.pix_fmt = 'yuv420p'
+                video_stream.options = {'crf': str(video_settings.crf), 'preset': video_settings.preset}
 
-                while not self.stop_event.is_set():
-                    loop_start_time = time.time()
+                audio_stream = None
+                if has_audio:
+                    audio_settings = self.preset.audio
+                    audio_stream = container.add_stream(audio_settings.codec, rate=audio_settings.samplerate)
+                    audio_stream.bit_rate = audio_settings.bitrate
+                    audio_stream.channels = audio_settings.channels
 
-                    # Capture video frame
-                    sct_img = sct.grab(self.target_monitor)
-                    frame_np = np.array(sct_img)
+                    self.audio_queue = queue.Queue()
+                    self.audio_thread = threading.Thread(target=self._audio_capture_thread, daemon=True)
+                    self.audio_thread.start()
 
-                    # Resize if necessary
-                    if (frame_np.shape[1], frame_np.shape[0]) != (width, height):
-                        frame_np = cv2.resize(frame_np, (width, height), interpolation=cv2.INTER_AREA)
+                # --- Main Recording Loop ---
+                with mss.mss() as sct:
+                    try:
+                        cursor_img = Image.open(resource_path("cursor.png")).convert("RGBA").resize((32, 32), Image.Resampling.LANCZOS)
+                    except FileNotFoundError:
+                        cursor_img = None
+                    mouse_controller = MouseController()
 
-                    # Add cursor
-                    if cursor_img:
-                        frame_pil = Image.fromarray(cv2.cvtColor(frame_np, cv2.COLOR_BGRA2RGB))
-                        mouse_pos = mouse_controller.position
-                        cursor_x = mouse_pos[0] - self.target_monitor['left']
-                        cursor_y = mouse_pos[1] - self.target_monitor['top']
-                        scaled_cursor_x = int(cursor_x * (width / self.target_monitor['width']))
-                        scaled_cursor_y = int(cursor_y * (height / self.target_monitor['height']))
-                        frame_pil.paste(cursor_img, (scaled_cursor_x, scaled_cursor_y), cursor_img)
-                        final_frame = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
-                    else:
-                        final_frame = cv2.cvtColor(frame_np, cv2.COLOR_BGRA2BGR)
+                    frame_time = 1 / fps
+                    next_frame_time = time.time()
+                    video_pts = 0
+                    audio_pts = 0
 
-                    # Write video frame to ffmpeg stdin
-                    process.stdin.write(final_frame.tobytes())
+                    while not self.stop_event.is_set():
+                        loop_start_time = time.time()
 
-                    # Write audio frames
-                    for i, q in enumerate(self.audio_queues):
-                        try:
-                            while not q.empty():
-                                audio_data = q.get_nowait()
-                                if audio_data:
-                                    process.stdin.write(audio_data)
-                        except queue.Empty:
-                            continue
+                        # --- Video Frame ---
+                        sct_img = sct.grab(self.target_monitor)
+                        frame_bgr = np.array(sct_img)
+                        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGRA2RGB)
 
-                    # Frame rate control
-                    sleep_time = (1 / video_settings.fps) - (time.time() - loop_start_time)
-                    if sleep_time > 0:
-                        time.sleep(sleep_time)
+                        # Resize if necessary
+                        if (frame_rgb.shape[1], frame_rgb.shape[0]) != (width, height):
+                            frame_rgb = cv2.resize(frame_rgb, (width, height), interpolation=cv2.INTER_AREA)
+
+                        # Add cursor
+                        if cursor_img:
+                            frame_pil = Image.fromarray(frame_rgb)
+                            mouse_pos = mouse_controller.position
+                            cursor_x = mouse_pos[0] - self.target_monitor['left']
+                            cursor_y = mouse_pos[1] - self.target_monitor['top']
+                            scaled_cursor_x = int(cursor_x * (width / self.target_monitor['width']))
+                            scaled_cursor_y = int(cursor_y * (height / self.target_monitor['height']))
+                            frame_pil.paste(cursor_img, (scaled_cursor_x, scaled_cursor_y), cursor_img)
+                            final_frame_rgb = np.array(frame_pil)
+                        else:
+                            final_frame_rgb = frame_rgb
+
+                        video_frame = av.VideoFrame.from_ndarray(final_frame_rgb, format='rgb24')
+                        video_frame.pts = video_pts
+                        video_pts += 1
+
+                        for packet in video_stream.encode(video_frame):
+                            container.mux(packet)
+
+                        # --- Audio Frames ---
+                        if audio_stream:
+                            try:
+                                while not self.audio_queue.empty():
+                                    audio_data = self.audio_queue.get_nowait()
+                                    if audio_data is None: # End of stream signal
+                                        break
+
+                                    # Soundcard provides 'float32' interleaved data (num_samples, num_channels), which corresponds to the 'flt' sample format in FFmpeg/PyAV.
+                                    audio_frame = av.AudioFrame.from_ndarray(
+                                        audio_data,
+                                        format='flt',
+                                        layout= 'stereo' if audio_stream.layout.name == 'stereo' else 'mono'
+                                    )
+                                    audio_frame.pts = audio_pts
+                                    audio_pts += audio_frame.samples
+
+                                    for packet in audio_stream.encode(audio_frame):
+                                        container.mux(packet)
+                            except queue.Empty:
+                                pass
+
+                        # --- Frame Rate Control & PTS Synchronization ---
+                        next_frame_time += frame_time
+                        sleep_duration = next_frame_time - time.time()
+                        if sleep_duration > 0:
+                            time.sleep(sleep_duration)
+
+                # --- Flush encoders ---
+                for packet in video_stream.encode():
+                    container.mux(packet)
+                if audio_stream:
+                    for packet in audio_stream.encode():
+                        container.mux(packet)
 
         except Exception as e:
-            print(f"Erro fatal no loop de gravação: {e}")
+            print(f"Erro fatal no loop de gravação com PyAV: {e}")
         finally:
-            # --- Cleanup ---
-            process.stdin.close()
-            process.wait()
-            # Drain audio queues
-            for q in self.audio_queues:
-                while not q.empty():
-                    q.get_nowait()
+            if has_audio and self.audio_thread and self.audio_thread.is_alive():
+                self.audio_thread.join(timeout=2)
+            # Drain queue
+            while not self.audio_queue.empty():
+                self.audio_queue.get_nowait()
