@@ -6,9 +6,10 @@ Uma ferramenta de gravação de tela e áudio de alta performance, forjada em Py
 
 - [Funcionalidades Principais](#funcionalidades-principais)
 - [Pré-requisitos](#pré-requisitos)
-- [Instalação e Setup (O Ritual de Preparação da Forja)](#instalação-e-setup-o-ritual-de-preparação-da-forja)
+- [Instalação e Setup (O Caminho do Mestre)](#instalação-e-setup-o-caminho-do-mestre)
 - [Executando em Modo de Desenvolvimento](#executando-em-modo-de-desenvolvimento)
-- [Compilando o Artefato (Forjando o Executável)](#compilando-o-artefato-forjando-o-executável)
+- [Compilando o Artefato (O Ritual de Batalha Final)](#compilando-o-artefato-o-ritual-de-batalha-final)
+- [Notas da Forja (Solução de Problemas Comuns)](#notas-da-forja-solução-de-problemas-comuns)
 
 ## Funcionalidades Principais
 
@@ -25,82 +26,69 @@ Para começar a trabalhar no Sentinela Guará, você precisará ter o seguinte s
 - **Python**: Versão 3.10 ou superior.
 - **Git**: Para clonar o repositório do projeto.
 
-## Instalação e Setup (O Ritual de Preparação da Forja)
+## Instalação e Setup (O Caminho do Mestre)
 
 Siga estes passos para configurar seu ambiente de desenvolvimento:
 
-1.  **Clonar o Repositório**
-
-    Abra seu terminal e clone o repositório do Sentinela Guará com o seguinte comando:
-
+1.  **Clone o repositório:**
     ```bash
     git clone https://github.com/seu-usuario/sentinela-guara.git
-    cd sentinela-guara
     ```
     *(Lembre-se de substituir `seu-usuario/sentinela-guara` pela URL correta do repositório.)*
 
-2.  **Criar o Ambiente Virtual**
+2.  **Navegue até a pasta:**
+    ```bash
+    cd Sentinela.CodigoGuara-main
+    ```
 
-    É crucial criar um ambiente virtual para isolar as dependências do projeto e evitar conflitos com outros projetos Python em sua máquina. Isso garante que o projeto tenha suas próprias versões de pacotes, independentemente de outros projetos.
-
+3.  **Crie o Santuário Virtual:**
     ```bash
     python -m venv .venv
     ```
 
-3.  **Ativar o Ambiente**
-
-    Ative o ambiente virtual de acordo com o seu sistema operacional:
-
-    -   **Windows:**
-        ```bash
-        .venv\Scripts\activate
-        ```
-    -   **macOS/Linux:**
-        ```bash
-        source .venv/bin/activate
-        ```
-
-4.  **Instalar as Dependências**
-
-    Com o ambiente virtual ativado, instale todas as dependências necessárias listadas no arquivo `requirements.txt`:
-
+4.  **Instale os Ingredientes Essenciais (Requisitos):**
+    Use o Feitiço de Invocação Direta, que é imune aos escudos de proteção do PowerShell. Este método garante que você está usando o interpretador Python e o gerenciador de pacotes do seu ambiente virtual, sem a necessidade de ativá-lo explicitamente.
     ```bash
-    pip install -r requirements.txt
+    bash .venv\Scripts\python.exe -m pip install -r requirements.txt
     ```
 
 ## Executando em Modo de Desenvolvimento
 
-Para rodar a aplicação diretamente do código-fonte, garantindo que todas as importações funcionem corretamente, execute o projeto como um módulo a partir do diretório raiz:
+Para rodar a aplicação diretamente do código-fonte, utilize o método de "Invocação Direta" para garantir que o interpretador correto do ambiente virtual seja usado:
 
 ```bash
-python -m src.main
+bash .venv\Scripts\python.exe -m src.main
 ```
 
-## Compilando o Artefato (Forjando o Executável)
+## Compilando o Artefato (O Ritual de Batalha Final)
 
-Para distribuir a aplicação, você pode compilá-la em um executável autônomo usando o **PyInstaller**.
+Para distribuir a aplicação, você pode compilá-la em um executável autônomo.
 
-1.  **Instale o PyInstaller**
-
-    Se você ainda não o tem em seu ambiente virtual, instale-o:
-
+1.  **Forje o Martelo de Compilação (PyInstaller):**
+    Primeiro, instale o PyInstaller no seu ambiente virtual usando a "Invocação Direta".
     ```bash
-    pip install pyinstaller
+    bash .venv\Scripts\python.exe -m pip install pyinstaller
     ```
 
-2.  **Compile o Projeto**
-
-    Use o comando abaixo para iniciar o processo de compilação. Este comando irá agrupar seu código e dependências em uma única pasta.
-
+2.  **Conjurando o Encantamento de Vinculação Final:**
+    Execute o comando a seguir para compilar o projeto. Ele irá agrupar o código e todas as dependências em uma única pasta.
     ```bash
-    pyinstaller --noconfirm --windowed --name SentinelaGuara --add-data "assets;assets" --icon="assets/logo_guara.ico" src/main.py
+    bash .venv\Scripts\pyinstaller.exe --noconfirm --windowed --name SentinelaGuara --icon="assets/sentinela.ico" --add-data "assets;assets/" src/main.py
     ```
 
-    **Explicação das Flags:**
-    - `--noconfirm`: Substitui o diretório de saída sem pedir confirmação.
-    - `--windowed`: Garante que a aplicação seja executada sem um console de terminal em segundo plano.
-    - `--name SentinelaGuara`: Define o nome do executável e da pasta de distribuição.
-    - `--add-data "assets;assets"`: Inclui a pasta de recursos (ícones, imagens) no executável final. O caminho é especificado como `"origem;destino"`.
-    - `--icon="assets/logo_guara.ico"`: Define o ícone da aplicação.
+3.  **O Artefato Final:**
+    Após a conclusão do ritual, o executável e todos os seus arquivos de suporte estarão localizados na pasta `dist/SentinelaGuara`, prontos para a batalha.
 
-Após a compilação, o artefato final estará pronto para uso na pasta `dist/SentinelaGuara`.
+## Notas da Forja (Solução de Problemas Comuns)
+
+-   **O Fantasma do Ícone (Cache do Windows):**
+    O Windows armazena ícones de aplicativos em um cache para acelerar sua exibição. Após recompilar o Sentinela Guará com um novo ícone, o sistema operacional pode continuar exibindo o ícone antigo. Para forçar a atualização, execute o 'Ritual de Expurgo do Cache'. Abra o `cmd` como administrador e execute os seguintes comandos em sequência:
+    ```cmd
+    ie4uinit.exe -show
+    taskkill /IM explorer.exe /F
+    DEL "%localappdata%\IconCache.db" /A
+    explorer.exe
+    ```
+
+-   **Conflitos com a Biblioteca Imperial (Erros de Pacotes Globais):**
+    O método de 'Invocação Direta' (`bash .venv\Scripts\python.exe ...`) é uma salvaguarda poderosa. Ele garante que seu comando está usando o interpretador Python e os pacotes instalados dentro do "Santuário Virtual" (`.venv`), ignorando qualquer versão do Python ou pacotes conflitantes que possam estar instalados globalmente em seu sistema. Isso evita uma classe comum de erros onde o sistema tenta usar uma versão de biblioteca incompatível.
