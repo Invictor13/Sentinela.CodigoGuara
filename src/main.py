@@ -55,7 +55,7 @@ def main():
     root.geometry("1280x720")
 
     try:
-        icon_path_ico = resource_path('assets/logo_guara.ico')
+        icon_path_ico = resource_path('assets/sentinela.ico')
         root.iconbitmap(icon_path_ico)
     except (tk.TclError, FileNotFoundError):
         icon_path_ico = None

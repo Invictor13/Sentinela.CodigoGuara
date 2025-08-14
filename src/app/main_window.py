@@ -33,6 +33,8 @@ class Bubble:
 class MainApplication(tk.Frame):
     def __init__(self, parent, capture_module, recording_module, app_config):
         super().__init__(parent)
+        # Sela o ícone na janela principal, garantindo sua presença na barra de tarefas
+        self.parent.iconbitmap(resource_path('assets/sentinela.ico'))
         self.parent = parent
         self.capture_module = capture_module
         self.recording_module = recording_module
@@ -62,8 +64,9 @@ class MainApplication(tk.Frame):
             logo_image.thumbnail((200, 60))
             self.logo_tk = ImageTk.PhotoImage(logo_image)
             tk.Label(header_container, image=self.logo_tk, bg=theme["card_bg"]).pack(pady=(0,10))
-        except FileNotFoundError:
-            pass
+        except Exception as e:
+            # Se qualquer erro ocorrer, ele não quebrará o app, mas nos dirá o que aconteceu
+            print(f"ALERTA DA FORJA: Não foi possível carregar o logo. Causa: {e}")
         tk.Label(header_container, text="Sentinela Guará", font=("Segoe UI", 26, "bold"), bg=theme["card_bg"], fg=theme["text_primary"]).pack()
         tk.Label(header_container, text="Gravador de evidências simples e seguro", font=("Segoe UI", 10), bg=theme["card_bg"], fg=theme["text_secondary"]).pack(pady=(0,10))
         tk.Frame(self.main_card_frame, height=1, bg=theme["separator"]).pack(fill="x", padx=40, pady=(15,10))
