@@ -33,9 +33,9 @@ class Bubble:
 class MainApplication(tk.Frame):
     def __init__(self, parent, capture_module, recording_module, app_config):
         super().__init__(parent)
-        # Sela o ícone na janela principal, garantindo sua presença na barra de tarefas
-        self.parent.iconbitmap(resource_path('assets/sentinela.ico'))
         self.parent = parent
+        # Posição correta: Primeiro definimos quem é o pai, DEPOIS o usamos.
+        self.parent.iconbitmap(resource_path('assets/sentinela.ico'))
         self.capture_module = capture_module
         self.recording_module = recording_module
         self.app_config = app_config
