@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\logo_guara.ico'],
+    icon=['assets\\sentinela.ico'],
 )
 coll = COLLECT(
     exe,
